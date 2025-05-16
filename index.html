@@ -23,23 +23,20 @@
       color: #033;
       cursor: not-allowed;
     }
-    #predict-btn {
-      background: #0ff;
-      color: #000;
+    #predict-btn, #clear-btn {
       padding: 10px 20px;
       font-size: 18px;
       border: none;
       cursor: pointer;
       margin: 5px;
     }
+    #predict-btn {
+      background: #0ff;
+      color: #000;
+    }
     #clear-btn {
       background: #555;
       color: #eee;
-      padding: 10px 20px;
-      font-size: 18px;
-      border: none;
-      cursor: pointer;
-      margin: 5px;
     }
     #status {
       margin-top: 10px;
@@ -69,22 +66,18 @@
   const predictBtn = document.getElementById('predict-btn');
   const clearBtn = document.getElementById('clear-btn');
 
-  // Setup canvas for drawing
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
   let drawing = false;
 
-  // Set up black background
   ctx.fillStyle = 'black';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  canvas.addEventListener('mousedown', () => { drawing = true; });
+  canvas.addEventListener('mousedown', () => drawing = true);
   canvas.addEventListener('mouseup', () => { drawing = false; ctx.beginPath(); });
   canvas.addEventListener('mouseout', () => { drawing = false; ctx.beginPath(); });
-
   canvas.addEventListener('mousemove', draw);
 
-  // For touch devices
   canvas.addEventListener('touchstart', (e) => { e.preventDefault(); drawing = true; });
   canvas.addEventListener('touchend', (e) => { e.preventDefault(); drawing = false; ctx.beginPath(); });
   canvas.addEventListener('touchmove', (e) => {
@@ -102,13 +95,8 @@
     ctx.strokeStyle = 'white';
 
     const rect = canvas.getBoundingClientRect();
-    let x, y;
-    if (e.clientX && e.clientY) {
-      x = e.clientX - rect.left;
-      y = e.clientY - rect.top;
-    } else {
-      return;
-    }
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
 
     ctx.lineTo(x, y);
     ctx.stroke();
@@ -123,59 +111,45 @@
     output.textContent = '';
   });
 
-  // Load the model
   async function loadModel() {
     try {
       status.textContent = 'Loading model...';
       model = await tf.loadLayersModel('model/model.json');
       status.textContent = 'Model loaded successfully!';
       predictBtn.disabled = false;
-      console.log('Model loaded:', model);
     } catch (error) {
       console.error('Error loading model:', error);
       status.textContent = 'Failed to load model. Check console.';
     }
   }
 
-  // Prediction logic
   async function predict() {
-    if (!model) {
-      alert('Model is not loaded yet!');
-      return;
-    }
+    if (!model) return alert('Model not loaded yet!');
 
-    // Preprocess canvas image to model input size 28x28 grayscale normalized
-    let imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-    // Create a temporary canvas to resize the image to 28x28
     const tmpCanvas = document.createElement('canvas');
-    tmpCanvas.width = 28;
-    tmpCanvas.height = 28;
+    tmpCanvas.width = 128;
+    tmpCanvas.height = 128;
     const tmpCtx = tmpCanvas.getContext('2d');
+    tmpCtx.drawImage(canvas, 0, 0, 128, 128);
 
-    // Draw original canvas to temp canvas scaled down
-    tmpCtx.drawImage(canvas, 0, 0, 28, 28);
-
-    // Get image data of resized canvas
-    let smallImgData = tmpCtx.getImageData(0, 0, 28, 28);
-
-    // Convert to grayscale and normalize [0,1]
+    const imageData = tmpCtx.getImageData(0, 0, 128, 128);
+    const { data } = imageData;
     const input = [];
-    for (let i = 0; i < smallImgData.data.length; i += 4) {
-      // Using R channel (or any) because grayscale
-      let grayscale = smallImgData.data[i + 3] / 255; // use alpha channel for opacity (white drawing)
-      input.push(grayscale);
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const gray = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      input.push(gray);
     }
 
-    // Create a tensor and reshape to [1,28,28,1]
-    const tensor = tf.tensor(input, [1, 28, 28, 1]);
+    const tensor = tf.tensor(input, [1, 128, 128, 1]);
 
-    // Run prediction
     const prediction = model.predict(tensor);
-    const probabilities = prediction.dataSync();
+    const probabilities = await prediction.data();
     const predictedIndex = prediction.argMax(1).dataSync()[0];
 
-    // Animate prediction message
     const messages = [
       `Keni: Yahh! I got it, you have drawn ${predictedIndex}!`,
       `Keni: I'm sure it's a ${predictedIndex}!`,
@@ -186,7 +160,6 @@
 
     const message = messages[Math.floor(Math.random() * messages.length)];
     output.textContent = '';
-
     let i = 0;
     function typeWriter() {
       if (i < message.length) {
@@ -197,14 +170,11 @@
     }
     typeWriter();
 
-    // Clean up tensors
     tensor.dispose();
     prediction.dispose();
   }
 
   predictBtn.addEventListener('click', predict);
-
-  // Start loading the model when page loads
   loadModel();
 </script>
 </body>
