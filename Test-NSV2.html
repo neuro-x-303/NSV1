@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>NSV1 Digit Predictor</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.2.0/dist/tf.min.js"></script>
+  <style>
+    body {
+      background: #000;
+      color: #0ff;
+      font-family: 'Courier New', Courier, monospace;
+      text-align: center;
+      padding: 20px;
+    }
+    #canvas {
+      border: 2px solid #0ff;
+      background: #000;
+      touch-action: none;
+      margin-bottom: 15px;
+      width: 400px;
+      height: 280px;
+    }
+    #predict-btn:disabled {
+      background: #044;
+      color: #033;
+      cursor: not-allowed;
+    }
+    #predict-btn, #clear-btn {
+      padding: 10px 20px;
+      font-size: 18px;
+      border: none;
+      cursor: pointer;
+      margin: 5px;
+    }
+    #predict-btn {
+      background: #0ff;
+      color: #000;
+    }
+    #clear-btn {
+      background: #555;
+      color: #eee;
+    }
+    #status {
+      margin-top: 10px;
+      font-weight: bold;
+    }
+    #output {
+      margin-top: 15px;
+      font-size: 22px;
+      min-height: 30px;
+      color: #0f0;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>This is Neuro Smart Vision 2</h1>
+  <canvas id="canvas" width="400" height="280"></canvas><br/>
+  <button id="predict-btn" disabled>Predict</button>
+  <button id="clear-btn">Clear</button>
+  <div id="status">Loading model, please wait...</div>
+  <div id="output"></div>
+
+<script>
+  let model;
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const predictBtn = document.getElementById('predict-btn');
+  const clearBtn = document.getElementById('clear-btn');
+  const status = document.getElementById('status');
+  const output = document.getElementById('output');
+
+  ctx.fillStyle = 'black';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  let drawing = false;
+
+  canvas.addEventListener('mousedown', () => drawing = true);
+  canvas.addEventListener('mouseup', () => { drawing = false; ctx.beginPath(); });
+  canvas.addEventListener('mouseout', () => { drawing = false; ctx.beginPath(); });
+  canvas.addEventListener('mousemove', draw);
+
+  canvas.addEventListener('touchstart', (e) => { e.preventDefault(); drawing = true; });
+  canvas.addEventListener('touchend', (e) => { e.preventDefault(); drawing = false; ctx.beginPath(); });
+  canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (!drawing) return;
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches[0];
+    draw({ clientX: touch.clientX, clientY: touch.clientY });
+  });
+
+  function draw(e) {
+    if (!drawing) return;
+    ctx.lineWidth = 20;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'white';
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+  }
+
+  clearBtn.addEventListener('click', () => {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    output.textContent = '';
+  });
+
+  async function loadModel() {
+    try {
+      status.textContent = 'Loading model...';
+      model = await tf.loadLayersModel('model/model.json');
+      status.textContent = 'Model loaded successfully!';
+      predictBtn.disabled = false;
+    } catch (err) {
+      status.textContent = 'Failed to load model!';
+      console.error(err);
+    }
+  }
+
+  async function predict() {
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const { width, height, data } = imageData;
+
+    // Vertical projection to split digits
+    const projection = new Array(width).fill(0);
+    for (let x = 0; x < width; x++) {
+      for (let y = 0; y < height; y++) {
+        const i = (y * width + x) * 4;
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        const brightness = (r + g + b) / 3;
+        if (brightness > 20) projection[x]++;
+      }
+    }
+
+    let regions = [];
+    let inChar = false;
+    let start = 0;
+    for (let i = 0; i < projection.length; i++) {
+      if (projection[i] > 0 && !inChar) {
+        start = i;
+        inChar = true;
+      } else if ((projection[i] === 0 || i === projection.length - 1) && inChar) {
+        let end = (projection[i] === 0) ? i - 1 : i;
+        if (end - start > 5) {
+          regions.push([start, end]);
+        }
+        inChar = false;
+      }
+    }
+
+    if (regions.length === 0) {
+      output.textContent = 'Draw digits first!';
+      return;
+    }
+
+    let finalNumber = '';
+    for (const [startX, endX] of regions) {
+      const tmpCanvas = document.createElement('canvas');
+      tmpCanvas.width = 128;
+      tmpCanvas.height = 128;
+      const tmpCtx = tmpCanvas.getContext('2d');
+
+      tmpCtx.fillStyle = 'black';
+      tmpCtx.fillRect(0, 0, 128, 128);
+
+      const charWidth = endX - startX + 1;
+      tmpCtx.drawImage(canvas,
+        startX, 0, charWidth, height,
+        0, 0, 128, 128
+      );
+
+      const imgData = tmpCtx.getImageData(0, 0, 128, 128);
+      const input = [];
+      for (let i = 0; i < imgData.data.length; i += 4) {
+        const r = imgData.data[i];
+        const g = imgData.data[i + 1];
+        const b = imgData.data[i + 2];
+        const gray = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        input.push(gray);
+      }
+
+      const tensor = tf.tensor(input, [1, 128, 128, 1]);
+      const prediction = model.predict(tensor);
+      const digit = prediction.argMax(1).dataSync()[0];
+      finalNumber += digit.toString();
+
+      tensor.dispose();
+      prediction.dispose();
+    }
+
+    const messages = [
+      `Keni: Yahh! I got it, you have drawn ${finalNumber}!`,
+      `Keni: I'm sure it's a ${finalNumber}!`,
+      `Keni: That's clearly a ${finalNumber}!`,
+      `Keni: The number looks like ${finalNumber}!`,
+      `Keni: Without a doubt, it's ${finalNumber}!`
+    ];
+
+    const message = messages[Math.floor(Math.random() * messages.length)];
+
+    output.textContent = '';
+    let i = 0;
+    function typeWriter() {
+      if (i < message.length) {
+        output.textContent += message.charAt(i);
+        i++;
+        setTimeout(typeWriter, 40);
+      }
+    }
+    typeWriter();
+  }
+
+  predictBtn.addEventListener('click', predict);
+  loadModel();
+</script>
+</body>
+</html>
