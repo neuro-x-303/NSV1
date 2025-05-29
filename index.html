@@ -5,25 +5,43 @@
   <title>NSV1 Model Predictor</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.2.0/dist/tf.min.js"></script>
   <style>
+    * {
+      box-sizing: border-box;
+    }
     body {
       background: #111;
       color: #0ff;
       font-family: 'Courier New', Courier, monospace;
       text-align: center;
       padding: 20px;
+      margin: 0;
     }
-    #canvas {
+    h1 {
+      font-size: 2em;
+    }
+    .container {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 20px;
+    }
+    .canvas-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    canvas {
       border: 2px solid #0ff;
       background: #000;
       touch-action: none;
-      margin-bottom: 15px;
+      max-width: 100%;
+      height: auto;
     }
-    #predict-btn:disabled {
-      background: #044;
-      color: #033;
-      cursor: not-allowed;
+    #output-canvas {
+      background: #fff;
+      color: #000;
     }
-    #predict-btn, #clear-btn {
+    button {
       padding: 10px 20px;
       font-size: 18px;
       border: none;
@@ -33,6 +51,11 @@
     #predict-btn {
       background: #0ff;
       color: #000;
+    }
+    #predict-btn:disabled {
+      background: #044;
+      color: #033;
+      cursor: not-allowed;
     }
     #clear-btn {
       background: #555;
@@ -49,13 +72,27 @@
       color: #0f0;
       font-weight: bold;
     }
+
+    @media (max-width: 768px) {
+      .container {
+        flex-direction: column;
+        align-items: center;
+      }
+    }
   </style>
 </head>
 <body>
   <h1>NSV1 Digit Predictor</h1>
-  <canvas id="canvas" width="280" height="280"></canvas><br/>
-  <button id="predict-btn" disabled>Predict</button>
-  <button id="clear-btn">Clear</button>
+  <div class="container">
+    <div class="canvas-container">
+      <canvas id="canvas" width="280" height="280"></canvas>
+      <button id="predict-btn" disabled>Predict</button>
+      <button id="clear-btn">Clear</button>
+    </div>
+    <div class="canvas-container">
+      <canvas id="output-canvas" width="280" height="280"></canvas>
+    </div>
+  </div>
   <div id="status">Loading model, please wait...</div>
   <div id="output"></div>
 
@@ -68,10 +105,17 @@
 
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
+
+  const outCanvas = document.getElementById('output-canvas');
+  const outCtx = outCanvas.getContext('2d');
+
   let drawing = false;
 
+  // Initial fill
   ctx.fillStyle = 'black';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
+  outCtx.fillStyle = 'white';
+  outCtx.fillRect(0, 0, outCanvas.width, outCanvas.height);
 
   canvas.addEventListener('mousedown', () => drawing = true);
   canvas.addEventListener('mouseup', () => { drawing = false; ctx.beginPath(); });
@@ -108,6 +152,9 @@
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    outCtx.clearRect(0, 0, outCanvas.width, outCanvas.height);
+    outCtx.fillStyle = 'white';
+    outCtx.fillRect(0, 0, outCanvas.width, outCanvas.height);
     output.textContent = '';
   });
 
@@ -161,6 +208,7 @@
     const message = messages[Math.floor(Math.random() * messages.length)];
     output.textContent = '';
     let i = 0;
+
     function typeWriter() {
       if (i < message.length) {
         output.textContent += message.charAt(i);
@@ -169,6 +217,16 @@
       }
     }
     typeWriter();
+
+    // Render predicted number on white canvas
+    outCtx.clearRect(0, 0, outCanvas.width, outCanvas.height);
+    outCtx.fillStyle = 'white';
+    outCtx.fillRect(0, 0, outCanvas.width, outCanvas.height);
+    outCtx.fillStyle = 'black';
+    outCtx.font = 'bold 200px Arial';
+    outCtx.textAlign = 'center';
+    outCtx.textBaseline = 'middle';
+    outCtx.fillText(predictedIndex, outCanvas.width / 2, outCanvas.height / 2);
 
     tensor.dispose();
     prediction.dispose();
