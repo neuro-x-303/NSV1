@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>NSV1 Digit Predictor from Image Upload</title>
+  <title>NSV1 Digit Predictor</title>
   <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.2.0/dist/tf.min.js"></script>
   <style>
     body {
@@ -12,12 +12,13 @@
       text-align: center;
       padding: 20px;
     }
-    #uploaded-img {
-      max-width: 400px;
-      max-height: 280px;
+    #uploaded-image {
       border: 2px solid #0ff;
-      margin-bottom: 15px;
       background: #000;
+      margin-bottom: 15px;
+      width: 400px;
+      height: 280px;
+      object-fit: contain;
     }
     #predict-btn:disabled {
       background: #044;
@@ -49,39 +50,32 @@
       min-height: 30px;
       color: #0f0;
       font-weight: bold;
-      white-space: pre-wrap;
-    }
-    #hidden-canvas {
-      display: none;
     }
   </style>
 </head>
 <body>
-  <h1>NSV1 Digit Predictor from Image Upload</h1>
-
-  <input type="file" id="file-input" accept="image/*" />
-  <br/>
-  <img id="uploaded-img" alt="Upload an image with digits" />
-  <br/>
+  <h1>This is Neuro Smart Vision 2</h1>
+  <input type="file" id="image-upload" accept="image/*"><br/>
+  <img id="uploaded-image" alt="Uploaded Image Preview"/><br/>
   <button id="predict-btn" disabled>Predict</button>
   <button id="clear-btn">Clear</button>
   <div id="status">Loading model, please wait...</div>
   <div id="output"></div>
 
-  <canvas id="hidden-canvas" width="400" height="280"></canvas>
+  <!-- Hidden canvas for processing -->
+  <canvas id="hidden-canvas" width="400" height="280" style="display: none;"></canvas>
 
 <script>
   let model;
-  const fileInput = document.getElementById('file-input');
-  const uploadedImg = document.getElementById('uploaded-img');
+  const imageUpload = document.getElementById('image-upload');
+  const uploadedImage = document.getElementById('uploaded-image');
+  const hiddenCanvas = document.getElementById('hidden-canvas');
+  const hiddenCtx = hiddenCanvas.getContext('2d');
   const predictBtn = document.getElementById('predict-btn');
   const clearBtn = document.getElementById('clear-btn');
   const status = document.getElementById('status');
   const output = document.getElementById('output');
-  const hiddenCanvas = document.getElementById('hidden-canvas');
-  const hiddenCtx = hiddenCanvas.getContext('2d');
 
-  // Load the model
   async function loadModel() {
     try {
       status.textContent = 'Loading model...';
@@ -94,58 +88,33 @@
     }
   }
 
-  loadModel();
-
-  // When user uploads image, show it
-  fileInput.addEventListener('change', () => {
-    const file = fileInput.files[0];
+  imageUpload.addEventListener('change', (e) => {
+    const file = e.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-    reader.onload = function(e) {
-      uploadedImg.src = e.target.result;
-      output.textContent = '';
+    reader.onload = function (event) {
+      uploadedImage.src = event.target.result;
+      uploadedImage.onload = () => {
+        hiddenCtx.clearRect(0, 0, 400, 280);
+        hiddenCtx.drawImage(uploadedImage, 0, 0, 400, 280);
+      };
     };
     reader.readAsDataURL(file);
   });
 
-  // Clear button handler
   clearBtn.addEventListener('click', () => {
-    uploadedImg.src = '';
+    imageUpload.value = '';
+    uploadedImage.src = '';
     output.textContent = '';
-    fileInput.value = '';
+    hiddenCtx.clearRect(0, 0, 400, 280);
   });
 
-  // Prediction function
   async function predict() {
-    if (!uploadedImg.src) {
-      alert('Please upload an image first!');
-      return;
-    }
-
-    // Draw uploaded image to hidden canvas (resize to 400x280 or original ratio)
-    hiddenCtx.clearRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
-
-    // Maintain aspect ratio for uploaded image inside canvas
-    const maxWidth = hiddenCanvas.width;
-    const maxHeight = hiddenCanvas.height;
-    let imgWidth = uploadedImg.naturalWidth;
-    let imgHeight = uploadedImg.naturalHeight;
-    let ratio = Math.min(maxWidth / imgWidth, maxHeight / imgHeight);
-    let drawWidth = imgWidth * ratio;
-    let drawHeight = imgHeight * ratio;
-    let offsetX = (maxWidth - drawWidth) / 2;
-    let offsetY = (maxHeight - drawHeight) / 2;
-
-    hiddenCtx.fillStyle = 'black';
-    hiddenCtx.fillRect(0, 0, hiddenCanvas.width, hiddenCanvas.height);
-    hiddenCtx.drawImage(uploadedImg, offsetX, offsetY, drawWidth, drawHeight);
-
-    // Get image data
-    const imageData = hiddenCtx.getImageData(0, 0, hiddenCanvas.width, hiddenCanvas.height);
+    const imageData = hiddenCtx.getImageData(0, 0, 400, 280);
     const { width, height, data } = imageData;
 
-    // Vertical projection to split digits (same as your original logic)
+    // Vertical projection to split digits
     const projection = new Array(width).fill(0);
     for (let x = 0; x < width; x++) {
       for (let y = 0; y < height; y++) {
@@ -173,7 +142,7 @@
     }
 
     if (regions.length === 0) {
-      output.textContent = 'No digits detected! Make sure the image has clear digits.';
+      output.textContent = 'Please upload a clear image with digits!';
       return;
     }
 
@@ -235,6 +204,7 @@
   }
 
   predictBtn.addEventListener('click', predict);
+  loadModel();
 </script>
 </body>
 </html>
